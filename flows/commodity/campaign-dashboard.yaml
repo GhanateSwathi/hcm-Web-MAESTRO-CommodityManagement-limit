@@ -1,0 +1,83 @@
+url: ${HCM_WEB_URL}
+name: "Commodity - campaign dashboard opens"
+tags:
+  - smoke
+  - commodity
+---
+- runFlow: ../../subflows/open-app.yaml
+- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/open-commodity-management.yaml
+
+# The button is below the fold at the default browser window size, and tapOn
+# does not scroll to find an element on web - it only matches what is already in
+# the viewport. Without this the flow fails with "Element not found" on a cold
+# start, even though the button is plainly on the page.
+#
+# Two plain scrolls rather than scrollUntilVisible on purpose. scrollUntilVisible
+# intermittently reports "no visible element found" for this button while the
+# screenshot captured at the moment of failure shows it fully on screen, and it
+# kept failing after raising the timeout, lowering visibilityPercentage to 80 and
+# setting waitToSettleTimeoutMs. Plain scrolls are dumber and reliable here.
+- scroll
+- scroll
+
+# Matched on text because the button's id is a per-campaign UUID -
+# "commodity-row-card-view-stock-dashboard-button-fb5a48b4-d675-449d-acfe-bffdb9fbede4"
+# - so it identifies this one campaign's row rather than the control, and would
+# have to be rewritten for any other campaign or environment.
+- tapOn:
+    text: "View Dashboard"
+    label: "Open the campaign dashboard"
+
+# The dashboard aggregates warehouse data server-side and is the slow step of
+# this flow, so the wait is generous. Waiting on tab content rather than on the
+# campaigns list disappearing, which passes vacuously in the gap before the
+# dashboard paints.
+- extendedWaitUntil:
+    visible:
+      text: "Transaction Summary"
+    timeout: 120000
+    label: "Dashboard has rendered"
+
+- assertVisible:
+    text: "Commodity Management Dashboard"
+    label: "Breadcrumb shows the dashboard"
+
+# Regex rather than the literal string: the heading's own text node ends in a
+# trailing space and the tenant code renders as a nested "(ba)" child, so the
+# full-string match fails against the obvious-looking literal.
+- assertVisible:
+    text: "Commodity Management Module.*"
+    label: "Dashboard heading is rendered"
+
+- assertVisible:
+    text: "Stock Summary"
+    label: "Stock Summary tab is present"
+- assertVisible:
+    text: "Pending Returns"
+    label: "Pending Returns tab is present"
+
+- assertVisible:
+    text: "Data Sync"
+    label: "Data Sync panel is rendered"
+
+# Labels only, never the figures beside them. The sync counts and rate are live
+# production values that change between runs, so asserting them would produce a
+# test that fails for reasons that have nothing to do with the UI.
+- assertVisible:
+    text: "Total warehouse managers"
+    label: "Data Sync reports its warehouse manager total"
+# Copied verbatim from the view hierarchy, app typo included - "atleast" is what
+# the page actually renders, and the matcher is full-string.
+- assertVisible:
+    text: "Total WH managers synced atleast once"
+    label: "Data Sync reports its synced total"
+
+# Present-and-not-clicked on purpose. HCM_WEB_URL points at Bauchi production,
+# so submitting a shipment here would write a real record. This flow stays
+# read-only; anything that exercises New Shipment belongs against UAT.
+- assertVisible:
+    text: "New Shipment"
+    label: "New Shipment action is offered"
+
+- takeScreenshot: artifacts/commodity-dashboard

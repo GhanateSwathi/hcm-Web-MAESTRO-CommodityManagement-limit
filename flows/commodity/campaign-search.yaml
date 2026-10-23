@@ -1,0 +1,87 @@
+url: ${HCM_WEB_URL}
+name: "Commodity - campaign search filters the list"
+tags:
+  - smoke
+  - commodity
+---
+- runFlow: ../../subflows/open-app.yaml
+- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/open-commodity-management.yaml
+
+# Data-dependent, in the same way flows/login/valid-login.yaml hardcodes the
+# Bauchi campaign header: this is the ongoing campaign for this tenant and will
+# need changing for another tenant or another season. Worth promoting to an env
+# var alongside HCM_WEB_CITY if a second tenant is ever added.
+- tapOn:
+    id: "campaignName"
+    label: "Focus the Campaign name field"
+- eraseText
+- inputText: "BAUCHI_SMC_Campaign_2026"
+
+# Unlike the password field, this input echoes its value back as the element's
+# text, so asserting it is safe and catches a half-typed value before the search
+# is submitted. The id is required here: the same string is also the heading of
+# the result card below, so a bare text match would pass against the wrong
+# element and prove nothing about what is in the box.
+- assertVisible:
+    id: "campaignName"
+    text: "BAUCHI_SMC_Campaign_2026"
+    label: "Campaign name landed in full"
+
+# Matched on text, not id. The three buttons here carry ids of the form
+# "campaign-commodity-campaigns-inboxsearchcomposer-commodityprojectongoing-btn-<n>",
+# which embed both a counter that drifts between renders and the name of the
+# active tab, so they break on Upcoming and Completed as well as over time.
+- tapOn:
+    text: "Search"
+    label: "Submit the campaign search"
+
+# The result count sits below the fold at the default browser window size, and
+# neither assertVisible nor tapOn scrolls to find an element on web - they only
+# match what is already in the viewport. Scrolling explicitly is what makes this
+# pass from a cold start rather than only when some earlier step happened to
+# leave the page scrolled.
+- scrollUntilVisible:
+    element:
+      text: "1-1 of 1"
+    direction: DOWN
+    timeout: 20000
+    label: "Scroll the result count into view"
+
+# This is the assertion that actually proves the search worked. Asserting the
+# campaign card is visible would pass vacuously - that card is already on screen
+# before any search is submitted, because the unfiltered Ongoing list contains
+# it. The result count is the only thing on this page that distinguishes a
+# filtered list from an unfiltered one.
+- assertVisible:
+    text: "1-1 of 1"
+    label: "Search narrowed the list to exactly one campaign"
+
+- assertVisible:
+    text: "BAUCHI_SMC_Campaign_2026"
+    label: "The matching campaign is the one listed"
+
+- takeScreenshot: artifacts/commodity-campaign-search
+
+# Scrolling back up before touching Clear is load-bearing. After the scroll down
+# to the result count, the Search/Clear/Sort row is still inside the viewport but
+# sits underneath the sticky page header, so the tap lands on the header instead
+# of the button. Maestro reports that tap as successful - the failure only
+# surfaces further down as an assertion about a field that was never cleared.
+- scrollUntilVisible:
+    element:
+      text: "My Campaigns"
+    direction: UP
+    timeout: 20000
+    label: "Scroll back to the top so the header stops covering the search actions"
+
+# Clear resets the form. Asserted with the compound id+text selector again so
+# this checks the input specifically rather than the card heading, which stays
+# on screen after the filter is dropped.
+- tapOn:
+    text: "Clear"
+    label: "Clear the search"
+- assertNotVisible:
+    id: "campaignName"
+    text: "BAUCHI_SMC_Campaign_2026"
+    label: "Campaign name field was reset"

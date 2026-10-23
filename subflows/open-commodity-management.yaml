@@ -1,0 +1,40 @@
+url: ${HCM_WEB_URL}
+name: open-commodity-management
+---
+# Takes an already signed-in session from the landing page to My Campaigns.
+# Compose it after subflows/open-app.yaml and subflows/login.yaml - it does not
+# sign in and assumes the landing page has already painted.
+
+# "Commodity Management" is on the landing page twice: once as the card heading
+# and once as the link underneath the description. A bare text match resolves to
+# the heading, which is not clickable, so the tap reports success and the flow
+# only fails much later looking for a page it never navigated to. Anchoring with
+# `below:` the description is what separates the link from the heading - the same
+# problem the city dropdown has in subflows/login.yaml.
+#
+# The link also carries id "root-standalone-btn-63", which looks like the obvious
+# selector. It is not stable: this app's generated button ids were observed
+# shifting from btn-67 to btn-225 within a single browser session, so anything
+# matching "...-btn-<number>" will drift out from under the test.
+#
+# The description is matched as a regex rather than in full because the rendered
+# string ends in a trailing space - "...for assigned campaigns " - which is
+# invisible in the UI and silently lost when the text is copied by hand.
+- tapOn:
+    text: "Commodity Management"
+    below:
+      text: "Manage and View warehouse details.*"
+    label: "Open Commodity Management"
+
+# Positive wait on the destination heading rather than a notVisible check on the
+# landing card: the card unmounts before the campaigns route paints, so a
+# notVisible check passes in that gap and the next command races the render.
+- extendedWaitUntil:
+    visible:
+      text: "My Campaigns"
+    timeout: 60000
+    label: "My Campaigns page is reached"
+
+- assertVisible:
+    id: "Tab navigation"
+    label: "Campaign status tabs are rendered"

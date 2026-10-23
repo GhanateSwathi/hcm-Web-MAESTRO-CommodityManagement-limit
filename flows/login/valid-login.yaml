@@ -1,0 +1,34 @@
+url: ${HCM_WEB_URL}
+name: "Login - valid credentials sign in"
+tags:
+  - smoke
+  - login
+---
+- runFlow: ../../subflows/open-app.yaml
+- runFlow: ../../subflows/login.yaml
+
+# Sign-in round-trips the employee's tenant and role set before it renders the
+# landing page, so this is the slow step of the flow. Waiting on the landing
+# content itself - a positive assertion - rather than on the login form going
+# away, which passes vacuously in the gap before the next screen paints.
+- extendedWaitUntil:
+    visible:
+      id: "Landing page content"
+    timeout: 120000
+    label: "Landing page is reached after sign-in"
+
+- assertVisible:
+    id: "Main navigation"
+    label: "Left navigation is rendered"
+
+# Tenant-specific: this is the Bauchi header. Another tenant renders its own
+# campaign name here.
+- assertVisible:
+    text: "BAUCHI CAMPAIGN"
+    label: "Campaign header is rendered"
+
+- assertNotVisible:
+    id: "formcomposer-submit-action"
+    label: "Login form is dismissed"
+
+- takeScreenshot: artifacts/login-success

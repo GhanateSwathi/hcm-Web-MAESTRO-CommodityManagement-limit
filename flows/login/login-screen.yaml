@@ -1,0 +1,31 @@
+url: ${HCM_WEB_URL}
+name: "Login - login screen renders"
+tags:
+  - smoke
+  - login
+---
+# Cheapest possible health check: the page loads and paints its login form.
+# Submits nothing, so it stays green even when the backend is down.
+- runFlow: ../../subflows/open-app.yaml
+
+- assertVisible:
+    text: "Username"
+    label: "Username field is present"
+- assertVisible:
+    text: "Password"
+    label: "Password field is present"
+- assertVisible:
+    text: "Country/State/City"
+    label: "Country/State/City field is present"
+- assertVisible:
+    text: "Continue"
+    label: "Continue button is present"
+
+# Matched on id rather than text: the link reads "Forgot  password?" - two
+# spaces, and a trailing "?" that Maestro's full-string regex matcher reads as
+# a quantifier, so the literal string does not match itself.
+- assertVisible:
+    id: "formcomposer-secondary-action"
+    label: "Forgot password link is present"
+
+- takeScreenshot: artifacts/smoke-login-screen

@@ -1,0 +1,71 @@
+url: ${HCM_WEB_URL}
+name: login
+---
+# Every field on this form gives its label and its input the same resource-id,
+# so a bare id match resolves to two elements. Each field is therefore anchored
+# with `below: <its label>`, which is the one thing that reliably separates the
+# input from the label sitting on top of it.
+#
+# `index: 1` looks like the obvious way to do that and mostly works, but the
+# ordering is not stable across renders - the city field's index-1 tap landed on
+# the label instead of the input and left the dropdown closed, which then failed
+# further down as a missing dropdown list rather than a missed tap.
+
+- tapOn:
+    id: "user-login-standalone-core_login_username-field"
+    below:
+      text: "Username"
+    label: "Focus the Username field"
+- eraseText
+- inputText: ${HCM_WEB_USER_ID}
+# Note: the assert treats the user id as a full-string regex, so a value
+# containing regex metacharacters would need escaping here.
+- assertVisible:
+    text: ${HCM_WEB_USER_ID}
+    label: "Username landed in full"
+
+- tapOn:
+    id: "user-login-standalone-core_login_password-field"
+    below:
+      text: "Password"
+    label: "Focus the Password field"
+- eraseText
+- inputText: ${HCM_WEB_PASSWORD}
+# Deliberately not asserted the way the username is above. This form exposes
+# the password's value as plain text in the view hierarchy, so asserting on it
+# would echo the secret into the run log and the debug output.
+
+- tapOn:
+    id: "user-login-standalone-core_common_city-field"
+    below:
+      text: "Country/State/City"
+    label: "Open the Country/State/City dropdown"
+
+# The list is rendered on open, so selecting an option in the same breath as the
+# tap races it. Waiting on the list itself is what makes this reliable.
+- extendedWaitUntil:
+    visible:
+      id: "jk-dropdown-unique"
+    timeout: 10000
+    label: "City dropdown list is open"
+
+# The option has to be scoped to the open list. The tenant name is also the
+# heading of the login card, so an unscoped text match resolves to the heading,
+# the tap does nothing, and the form is submitted with no city selected.
+- tapOn:
+    text: ${HCM_WEB_CITY}
+    childOf:
+      id: "jk-dropdown-unique"
+    label: "Select ${HCM_WEB_CITY}"
+
+# Two elements carry privacy-component-check - the checkbox itself (index 0)
+# and the "By clicking, I accept the" label beside it. Continue stays disabled
+# until this is ticked.
+- tapOn:
+    id: "privacy-component-check"
+    index: 0
+    label: "Accept the privacy policy"
+
+- tapOn:
+    id: "formcomposer-submit-action"
+    label: "Submit the login form"

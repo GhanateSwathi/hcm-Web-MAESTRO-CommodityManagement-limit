@@ -1,0 +1,147 @@
+url: ${HCM_WEB_URL}
+name: "New shipment"
+tags:
+  - commodity
+  - shipment
+---
+# Drives the Bulk Stock Upload dialog as far as downloading the stock template.
+#
+# SCOPE LIMIT - read before extending this flow.
+# The requested flow was: download the template, fill SPAQ 1 / SPAQ 2, upload it,
+# and Submit. Everything up to and including the download is implemented and
+# verified below. The upload cannot currently be driven from Maestro, so the
+# Submit step is not reachable either. What was tried, and the evidence, is
+# recorded at the bottom of this file so the next person does not repeat it.
+#
+# WARNING: HCM_WEB_URL points at Bauchi production. This flow is read-only as it
+# stands - it downloads a file and writes nothing. Adding the Submit step will
+# create real stock records.
+
+- runFlow: ../../subflows/open-app.yaml
+- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/open-commodity-management.yaml
+
+# Two plain scrolls rather than scrollUntilVisible. scrollUntilVisible reports
+# "no visible element found" for this button even when a screenshot taken at the
+# moment of failure clearly shows it on screen, so it is not trustworthy here.
+- scroll
+- scroll
+- tapOn:
+    text: "View Dashboard"
+    label: "Open the campaign dashboard"
+- extendedWaitUntil:
+    visible:
+      text: "Transaction Summary"
+    timeout: 120000
+    label: "Dashboard has rendered"
+
+- tapOn:
+    text: "New Shipment"
+    label: "Open New Shipment"
+
+# New Shipment opens the Bulk Stock Upload dialog directly - there is no
+# intermediate step or menu.
+- extendedWaitUntil:
+    visible:
+      text: "Bulk Stock Upload"
+    timeout: 30000
+    label: "Bulk Stock Upload dialog is open"
+
+# The dialog scrolls independently of the page. `swipe: from: <element>` scrolls
+# the page *behind* the dialog and leaves the dialog untouched, which looks like
+# nothing happened; a coordinate swipe aimed inside the dialog body is what
+# actually moves it. Tapping a control that is still below the dialog's fold
+# lands on the backdrop and closes the whole dialog.
+- swipe:
+    start: "48%, 70%"
+    end: "48%, 30%"
+    duration: 800
+- swipe:
+    start: "48%, 70%"
+    end: "48%, 30%"
+    duration: 800
+
+- tapOn:
+    id: "campaign-commodity-dashboard-standalone-name-multiselect"
+    label: "Open the State multi-select"
+
+# Scoped id rather than `text: "Bauchi"`, which also matches the tenant name in
+# the page header and the BAUCHI CAMPAIGN title.
+- tapOn:
+    id: "Select option: Bauchi"
+    label: "Select Bauchi as the State"
+
+# Collapsing the dropdown is load-bearing, not cosmetic: the destination
+# facility list is only rendered once the State dropdown closes. Tapping the
+# multi-select again just reopens it, so an inert label inside the dialog is
+# used to dismiss it.
+- tapOn:
+    text: "Select the destination facilities to ship to"
+    label: "Collapse the State multi-select"
+
+# Facility-specific id, derived from the facility name and code. It will need
+# changing for a different destination facility or environment.
+- tapOn:
+    id: "campaign-commodity-dashboard-standalone-state-cms-f-2026-06-13-030843-checkbox"
+    label: "Select the State CMS destination facility"
+
+# Until both a State and a destination facility are ticked the dialog shows
+# "Please select hierarchy level first" and the download button is disabled, so
+# this assertion is what proves the two selections above actually registered.
+- assertNotVisible:
+    text: "Please select hierarchy level first"
+    label: "Hierarchy level is satisfied"
+
+- tapOn:
+    text: "Download Stock Template"
+    label: "Download the stock template"
+
+- assertVisible:
+    text: "Upload Stock Template"
+    label: "Upload section is present"
+
+- takeScreenshot: artifacts/new-shipment-template-downloaded
+
+# ---------------------------------------------------------------------------
+# WHY UPLOAD AND SUBMIT ARE NOT HERE
+#
+# The template downloads correctly to the browser's download directory, and
+# scripts/fill-stock-template.py fills SPAQ 1 / SPAQ 2 in it correctly. Handing
+# that filled file back to the page is the part that does not work.
+#
+# Tried, in order, all against the real dialog:
+#   1. A Maestro file-upload command - none exists. The generated command
+#      surface from `cheat_sheet` lists every command Maestro accepts and there
+#      is no upload; `addMedia` is an Android/iOS gallery command.
+#   2. `runScript` with browser JS - fails with "TypeError: undefined is not a
+#      function". runScript executes in Maestro's own JS engine, which has no
+#      DOM, no File, no DataTransfer.
+#   3. `assertTrue` with browser JS - this DOES reach the page. Confirmed with a
+#      control: `assertTrue: "false"` fails, so conditions really are evaluated,
+#      and document / atob / DataTransfer / querySelectorAll are all available.
+#   4. Via assertTrue: build a File from base64, assign input.files, fire a
+#      bubbling change event. The expression returns true and input.files.length
+#      becomes 1, but the dialog still shows "Drag and drop your filled excel
+#      sheet or / Browse in my files" and Submit stays disabled.
+#   5. Via assertTrue: additionally fire dragenter/dragover/drop carrying the
+#      same DataTransfer, walking up four ancestors of the input. No change.
+#   6. Via assertTrue: walk up eight ancestors, find every __reactProps$* key and
+#      invoke onDrop/onChange directly with a synthetic payload carrying the
+#      files. The condition returned the count of handlers invoked and passed,
+#      so a handler really was called - and the component still ignored it.
+#   7. Tap "Browse in my files" and answer the native Windows file dialog from
+#      outside Maestro (scripts/answer-file-dialog.ps1, run in parallel). The
+#      dialog never appears at all: ChromeDriver intercepts the browser's file
+#      chooser, so there is no OS window to drive. The watcher timed out with
+#      "The file dialog never appeared within 300 seconds."
+#
+# Note for anyone re-running these probes: `optional: true` on assertTrue is
+# reported as COMPLETED in this Maestro version even when the condition is
+# false, so optional probes tell you nothing. Keep diagnostic assertions
+# non-optional.
+#
+# Conclusion: with Maestro 2.10.0's web driver there is no working way to get a
+# file into this component. Automating the upload needs a different driver -
+# Playwright's set_input_files or Selenium's send_keys on the file input both
+# do this natively - or an API-level call that bypasses the UI.
+# ---------------------------------------------------------------------------

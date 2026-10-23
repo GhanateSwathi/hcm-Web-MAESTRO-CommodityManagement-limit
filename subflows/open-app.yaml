@@ -1,0 +1,18 @@
+url: ${HCM_WEB_URL}
+name: open-app
+---
+# workbench-ui keeps the employee session in browser storage, so without this
+# a second run opens straight onto the landing page and every login step below
+# fails looking for a form that was never shown.
+- clearState
+
+- openLink: ${HCM_WEB_URL}
+
+# Positive wait on the username input rather than a notVisible check on a
+# spinner: the login form is client-rendered and a notVisible check run before
+# the bundle paints passes vacuously.
+- extendedWaitUntil:
+    visible:
+      id: "user-login-standalone-core_login_username-field"
+    timeout: 60000
+    label: "Wait for the login form"
